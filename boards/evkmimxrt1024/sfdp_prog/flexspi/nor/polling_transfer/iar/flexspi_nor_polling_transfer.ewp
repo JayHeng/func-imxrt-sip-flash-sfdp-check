@@ -688,7 +688,7 @@
                 </option>
                 <option>
                     <name>OOCOutputFile</name>
-                    <state>rt1024_sfdp_prog.srec</state>
+                    <state>rt1024_sipflash_sfdp_prog.srec</state>
                 </option>
                 <option>
                     <name>OOCCommandLineProducer</name>
