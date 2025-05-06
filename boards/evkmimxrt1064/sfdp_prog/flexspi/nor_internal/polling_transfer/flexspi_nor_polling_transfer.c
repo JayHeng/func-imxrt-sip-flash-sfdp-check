@@ -36,8 +36,8 @@ extern status_t flexspi_nor_flash_erase_sector(FLEXSPI_Type *base, uint32_t addr
 extern status_t flexspi_nor_flash_page_program(FLEXSPI_Type *base, uint32_t dstAddr, const uint32_t *src);
 extern status_t flexspi_nor_get_vendor_id(FLEXSPI_Type *base, uint8_t *vendorId);
 extern status_t flexspi_nor_enable_quad_mode(FLEXSPI_Type *base);
-extern status_t flexspi_nor_erase_chip(FLEXSPI_Type *base);
 extern void flexspi_nor_flash_init(FLEXSPI_Type *base);
+extern void bsp_validate_jedec(void);
 /*******************************************************************************
  * Code
  ******************************************************************************/
@@ -110,21 +110,25 @@ const uint32_t customLUT[CUSTOM_LUT_LENGTH] = {
     [4 * NOR_CMD_LUT_SEQ_IDX_WRITESTATUSREG] =
         FLEXSPI_LUT_SEQ(kFLEXSPI_Command_SDR, kFLEXSPI_1PAD, 0x31, kFLEXSPI_Command_WRITE_SDR, kFLEXSPI_1PAD, 0x04),
 
-    /* Enter QPI mode */
-    [4 * NOR_CMD_LUT_SEQ_IDX_ENTERQPI] =
-        FLEXSPI_LUT_SEQ(kFLEXSPI_Command_SDR, kFLEXSPI_1PAD, 0x35, kFLEXSPI_Command_STOP, kFLEXSPI_1PAD, 0),
-
-    /* Exit QPI mode */
-    [4 * NOR_CMD_LUT_SEQ_IDX_EXITQPI] =
-        FLEXSPI_LUT_SEQ(kFLEXSPI_Command_SDR, kFLEXSPI_4PAD, 0xF5, kFLEXSPI_Command_STOP, kFLEXSPI_1PAD, 0),
-
     /* Read status register */
     [4 * NOR_CMD_LUT_SEQ_IDX_READSTATUSREG] =
         FLEXSPI_LUT_SEQ(kFLEXSPI_Command_SDR, kFLEXSPI_1PAD, 0x05, kFLEXSPI_Command_READ_SDR, kFLEXSPI_1PAD, 0x04),
 
-    /* Erase whole chip */
-    [4 * NOR_CMD_LUT_SEQ_IDX_ERASECHIP] =
-        FLEXSPI_LUT_SEQ(kFLEXSPI_Command_SDR, kFLEXSPI_1PAD, 0xC7, kFLEXSPI_Command_STOP, kFLEXSPI_1PAD, 0),
+    /* Read SFDP */
+    [4 * NOR_CMD_LUT_SEQ_IDX_READSFDP] =
+        FLEXSPI_LUT_SEQ(kFLEXSPI_Command_SDR,       kFLEXSPI_1PAD, 0x5A, kFLEXSPI_Command_RADDR_SDR, kFLEXSPI_1PAD, 0x18),
+    [4 * NOR_CMD_LUT_SEQ_IDX_READSFDP + 1] =
+        FLEXSPI_LUT_SEQ(kFLEXSPI_Command_DUMMY_SDR, kFLEXSPI_1PAD, 0x08, kFLEXSPI_Command_READ_SDR,  kFLEXSPI_1PAD, 0xFF),
+
+    /* Program Security registers or SFDP */
+    [4 * NOR_CMD_LUT_SEQ_IDX_WRITESECSFDP] =
+        FLEXSPI_LUT_SEQ(kFLEXSPI_Command_SDR,       kFLEXSPI_1PAD, 0x42, kFLEXSPI_Command_RADDR_SDR, kFLEXSPI_1PAD, 0x18),
+    [4 * NOR_CMD_LUT_SEQ_IDX_WRITESECSFDP + 1] =
+        FLEXSPI_LUT_SEQ(kFLEXSPI_Command_WRITE_SDR, kFLEXSPI_1PAD, 0xFF, kFLEXSPI_Command_STOP,      kFLEXSPI_1PAD, 0x00),
+
+    /* Erase Security registers or SFDP */
+    [4 * NOR_CMD_LUT_SEQ_IDX_ERASESECSFDP] =
+        FLEXSPI_LUT_SEQ(kFLEXSPI_Command_SDR,       kFLEXSPI_1PAD, 0x44, kFLEXSPI_Command_RADDR_SDR, kFLEXSPI_1PAD, 0x18),
 };
 
 /* Flexspi2 connects internal flash by default and this group of pins doesn't support the use of CFG tool configuration,
@@ -150,10 +154,6 @@ void BOARD_InitFlexspi2Pins(void)
 
 int main(void)
 {
-    uint32_t i = 0;
-    status_t status;
-    uint8_t vendorID = 0;
-
     BOARD_ConfigMPU();
     BOARD_InitBootPins();
     BOARD_InitBootClocks();
@@ -163,6 +163,12 @@ int main(void)
     flexspi_nor_flash_init(EXAMPLE_FLEXSPI);
 
     PRINTF("\r\nFLEXSPI example started!\r\n");
+    
+    bsp_validate_jedec();
+#if 0
+    uint32_t i = 0;
+    status_t status;
+    uint8_t vendorID = 0;
 
     /* Get vendor ID. */
     status = flexspi_nor_get_vendor_id(EXAMPLE_FLEXSPI, &vendorID);
@@ -171,19 +177,6 @@ int main(void)
         return status;
     }
     PRINTF("Vendor ID: 0x%x\r\n", vendorID);
-
-#if !(defined(XIP_EXTERNAL_FLASH))
-    /* Erase whole chip . */
-    PRINTF("Erasing whole chip over FlexSPI...\r\n");
-
-    status = flexspi_nor_erase_chip(EXAMPLE_FLEXSPI);
-    if (status != kStatus_Success)
-    {
-        return status;
-    }
-    PRINTF("Erase finished !\r\n");
-
-#endif
 
     /* Enter quad mode. */
     status = flexspi_nor_enable_quad_mode(EXAMPLE_FLEXSPI);
@@ -245,6 +238,7 @@ int main(void)
     {
         PRINTF("Program data - successfully. \r\n");
     }
+#endif
 
     while (1)
     {

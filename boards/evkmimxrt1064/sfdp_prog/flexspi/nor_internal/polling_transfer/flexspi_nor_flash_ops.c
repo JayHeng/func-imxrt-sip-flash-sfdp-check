@@ -526,46 +526,6 @@ status_t flexspi_nor_get_vendor_id(FLEXSPI_Type *base, uint8_t *vendorId)
     return status;
 }
 
-status_t flexspi_nor_erase_chip(FLEXSPI_Type *base)
-{
-    status_t status;
-    flexspi_transfer_t flashXfer;
-
-#if defined(CACHE_MAINTAIN) && CACHE_MAINTAIN
-    flexspi_cache_status_t cacheStatus;
-    flexspi_nor_disable_cache(&cacheStatus);
-#endif
-
-    /* Write enable */
-    status = flexspi_nor_write_enable(base, 0);
-
-    if (status != kStatus_Success)
-    {
-        return status;
-    }
-
-    flashXfer.deviceAddress = 0;
-    flashXfer.port          = FLASH_PORT;
-    flashXfer.cmdType       = kFLEXSPI_Command;
-    flashXfer.SeqNumber     = 1;
-    flashXfer.seqIndex      = NOR_CMD_LUT_SEQ_IDX_ERASECHIP;
-
-    status = FLEXSPI_TransferBlocking(base, &flashXfer);
-
-    if (status != kStatus_Success)
-    {
-        return status;
-    }
-
-    status = flexspi_nor_wait_bus_busy(base);
-
-#if defined(CACHE_MAINTAIN) && CACHE_MAINTAIN
-    flexspi_nor_enable_cache(cacheStatus);
-#endif
-
-    return status;
-}
-
 void flexspi_nor_flash_init(FLEXSPI_Type *base)
 {
     flexspi_config_t config;
