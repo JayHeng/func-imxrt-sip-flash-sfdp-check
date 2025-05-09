@@ -16,6 +16,7 @@
 #include "clock_config.h"
 #include "board.h"
 #include "fsl_common.h"
+#include "fsl_iomuxc.h"
 /*******************************************************************************
  * Definitions
  ******************************************************************************/
@@ -28,8 +29,10 @@
  ******************************************************************************/
 /* Program data buffer should be 4-bytes alignment, which can avoid busfault due to this memory region is configured as
    Device Memory by MPU. */
+#if 0
 SDK_ALIGN(static uint8_t s_nor_program_buffer[256], 4);
 static uint8_t s_nor_read_buffer[256];
+#endif
 
 extern status_t flexspi_nor_flash_erase_sector(FLEXSPI_Type *base, uint32_t address);
 extern status_t flexspi_nor_flash_page_program(FLEXSPI_Type *base, uint32_t dstAddr, const uint32_t *src);
@@ -131,6 +134,52 @@ const uint32_t customLUT[CUSTOM_LUT_LENGTH] = {
         FLEXSPI_LUT_SEQ(kFLEXSPI_Command_SDR,       kFLEXSPI_1PAD, 0x44, kFLEXSPI_Command_RADDR_SDR, kFLEXSPI_1PAD, 0x18),
 };
 
+volatile uint32_t g_systickCounter;
+void SysTick_Handler(void)
+{
+    if (g_systickCounter != 0U)
+    {
+        g_systickCounter--;
+    }
+}
+
+void SysTick_DelayTicks(uint32_t n)
+{
+    g_systickCounter = n;
+    while (g_systickCounter != 0U)
+    {
+    }
+}
+
+void BOARD_InitFlashResetPins(bool isEnabled)
+{
+    /* GPIO configuration of RESET */
+    gpio_pin_config_t RESET_config = {
+        .direction = kGPIO_DigitalOutput,
+        .outputLogic = 0U,
+        .interruptMode = kGPIO_NoIntmode
+    };
+
+    uint32_t swMuxGpioAdB1_13 = *((uint32_t *)0x401F8130);
+    uint32_t swPadGpioAdB1_13 = *((uint32_t *)0x401F82A4);
+    PRINTF("\r\nDefault IOMUXC_SW_MUX_CTL_PAD_GPIO_AD_B1_13 = 0x%x\r\n", swMuxGpioAdB1_13);
+    PRINTF("Default IOMUXC_SW_PAD_CTL_PAD_GPIO_AD_B1_13 = 0x%x\r\n", swPadGpioAdB1_13);
+    IOMUXC_SetPinMux(IOMUXC_GPIO_AD_B1_13_GPIO1_IO29, 0U);
+    IOMUXC_SetPinConfig(IOMUXC_GPIO_AD_B1_13_GPIO1_IO29, 0x10B0U);
+    GPIO_PinInit(GPIO1, 29U, &RESET_config);
+    if (isEnabled)
+    {
+        PRINTF("GPIO_AD_B1_13 reset pin is set to low, enabled\r\n");
+        GPIO_PinWrite(GPIO1, 29, 0U);
+    }
+    else
+    {
+        PRINTF("GPIO_AD_B1_13 reset pin is set to high, disabled\r\n");
+        GPIO_PinWrite(GPIO1, 29, 1U);
+    }
+    
+    SysTick_DelayTicks(1U);
+}
 
 int main(void)
 {
@@ -138,11 +187,25 @@ int main(void)
     BOARD_InitBootPins();
     BOARD_InitBootClocks();
     BOARD_InitDebugConsole();
+    /* Update the core clock */
+    SystemCoreClockUpdate();
+
+    /* Set systick reload value to generate 1ms interrupt */
+    if (SysTick_Config(SystemCoreClock / 1000U))
+    {
+        while (1)
+        {
+        }
+    }
 
     flexspi_nor_flash_init(EXAMPLE_FLEXSPI);
 
     PRINTF("\r\nFLEXSPI example started!\r\n");
     
+    BOARD_InitFlashResetPins(false);
+    bsp_validate_jedec();
+
+    BOARD_InitFlashResetPins(true);
     bsp_validate_jedec();
 #if 0
     uint32_t i = 0;
